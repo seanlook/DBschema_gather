@@ -87,6 +87,8 @@ def write_influxdb(*schema_info):
 
     point_time = int(datetime.today().strftime('%s'))
     series = []
+    datafile_size = 0
+    server_name = ()
     for row in rs:
         if row['DATA_TYPE'] is not None:
             max_int = MAX_INT[row['DATA_TYPE']] * 1.0
@@ -97,6 +99,8 @@ def write_influxdb(*schema_info):
         else:
             auto_usage = None
 
+        datafile_size += (row['DATA_LENGTH']/1024 + row['INDEX_LENGTH']/1024) / 1024  # G
+        server_host = (row['SERVER_NAME'], row['HOST'])
         pointValues = {
             "time": point_time,
             "measurement": metric,
@@ -117,6 +121,19 @@ def write_influxdb(*schema_info):
         }
         series.append(pointValues)
 
+    metric_size = "mysql_info_size"
+    series_pointValues_size = [{
+        "time": point_time,
+        "measurement": metric_size,
+        "tags": {
+            'server': server_host[0],
+            'host': server_host[1]
+        },
+        "fields": {
+            'datafile_size': datafile_size
+        }
+    }]
+
     try:
         client = InfluxDBClient(InfluxDB_INFO['host'],
                                 InfluxDB_INFO['port'],
@@ -128,6 +145,8 @@ def write_influxdb(*schema_info):
         client.write_points(points=series,
                             time_precision='s',
                             batch_size=100)
+        client.write_points(series_pointValues_size, 's')
+
     except InfluxDBClientError as e:
         print "Error[%s]: %s" % (e.code, e.content)
 
